@@ -1567,7 +1567,7 @@ mod tests {
     fn a_prerelease_config_that_says_unlimited_still_loads() {
         let older = r#"{"frame_rate_limit":"unlimited"}"#;
         let parsed: ShellConfig = serde_json::from_str(older).expect("must load");
-        assert_eq!(parsed.frame_rate_limit, FrameRateLimit::Cap240);
+        assert_eq!(parsed.frame_rate_limit, FrameRateLimit::Unlimited);
     }
 
     #[test]

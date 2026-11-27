@@ -172,6 +172,7 @@ pub enum FrameRateLimit {
     /// `DFIntTaskSchedulerTargetFps` set to 9999. The engine's own cap can be
     /// raised through flags; whether it honours a value this large is a property
     /// of the experience, not of this setting.
+    #[serde(alias = "unlimited")]
     Unlimited,
 }
 
