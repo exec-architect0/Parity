@@ -1061,6 +1061,24 @@ fn activate_roblox(
         return;
     }
 
+    // A fresh profile used to land in the engine's Lua login screen, where
+    // Roblox asks a bot challenge Cordial cannot answer. Offer the browser
+    // session import first. `--play` is a programmatic request and must not be
+    // stopped by a dialog nobody can see (ADR-058), so it keeps the old path.
+    let target_profile = config.borrow().profile.clone();
+    if !crate::cli::playing() && !crate::browser_import::has_saved_session(&target_profile) {
+        window.present();
+        let window = window.clone();
+        let toasts = toasts.clone();
+        let config = config.clone();
+        let join = join.clone();
+        let lifecycle = lifecycle.clone();
+        crate::browser_login::prompt(&window, &target_profile, move || {
+            launch_now_tracked(&window, &toasts, &config, &join, &lifecycle, mode);
+        });
+        return;
+    }
+
     launch_now_tracked(window, toasts, config, join, lifecycle, mode);
 }
 

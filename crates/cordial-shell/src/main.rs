@@ -31,6 +31,8 @@ mod cli;
 mod crash;
 mod deep_link;
 mod browser_account;
+mod browser_import;
+mod browser_login;
 mod diagnostics;
 mod doctor_run;
 mod flag_import;

@@ -38,6 +38,10 @@ After the profile lock is acquired, Cordial compares the exact snapshot again
 and pins that backend for the child process. A changed session or changed `auto`
 result cannot silently turn the match into a launch from another store.
 
+## Signing in from a browser session
+
+A browser **Play** request and the in-app **sign-in** are different flows and must not be confused. Routing uses a one-time launch ticket to pick an already saved Cordial profile and discards the session it redeems. A fresh profile has nothing to route to; it now opens `roblox.com` in Cordial's own WebKit view, saves the cookies from that sign-in, and starts the engine ([ADR-066](adr/ADR-066-sign-in-starts-inside-the-client.md)). No external browser is read.
+
 ## Verification
 
 Synthetic HTTP tests exercise redemption, cookie handoff, authenticated identity
