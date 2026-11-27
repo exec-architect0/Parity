@@ -231,7 +231,7 @@ pub fn duplicate(source: &str, target: &str) -> Result<(), String> {
     if to.exists() {
         return Err(format!("a profile called {target:?} already exists"));
     }
-    let claim = acquire(target)?;
+    let claim = acquire(target).map_err(|e| e.to_string())?;
     drop(claim);
     copy_tree(&from, &to).map_err(|e| format!("could not copy profile data: {e}"))?;
     for store in [Store::File, Store::Keyring] {

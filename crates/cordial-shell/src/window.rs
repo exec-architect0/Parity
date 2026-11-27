@@ -379,6 +379,25 @@ pub fn build(
     // context the window is acting in, rather than an action on it.
     host.header().pack_start(&profile_button);
 
+    // The Roblox build is the other piece of context somebody needs before
+    // pressing Launch. It used to be three panes deep in Preferences, which is
+    // where a launcher that shows the active account but hides the active
+    // version reads as inconsistent. The button opens the same Version page
+    // the menu did; advanced choices, including a custom version, stay there.
+    let version_button = gtk::Button::new();
+    version_button.set_tooltip_text(Some("Choose Roblox version"));
+    {
+        let config = config.clone();
+        let dir = profile::dir(&config.borrow().profile).ok();
+        let pin = dir.and_then(|d| profile::pinned_version(&d));
+        version_button.set_label(&pin.unwrap_or_else(|| "Latest".to_string()));
+    }
+    let version_window = host.window().clone();
+    version_button.connect_clicked(move |_| {
+        let _ = version_window.activate_action("win.settings", Some(&"version".to_variant()));
+    });
+    host.header().pack_start(&version_button);
+
     let window = host.window().clone();
     // `HostWindow` is deliberately application-less — the runtime has no
     // `GApplication` — so the shell binary attaches its own here, which is
@@ -476,9 +495,17 @@ pub fn build(
         if let Some(name) = page.and_then(|p| p.str()).filter(|n| !n.is_empty()) {
             settings.set_visible_page_name(name);
         }
-        // The Version page can pin the profile the launcher row describes.
+        // The Version page can pin the profile the launcher row describes,
+        // and the header button says which build is pinned.
         let refresh = refresh_profile_row.clone();
-        settings.connect_closed(move |_| refresh());
+        let version_button = version_button.clone();
+        let version_config = config.clone();
+        settings.connect_closed(move |_| {
+            refresh();
+            let dir = profile::dir(&version_config.borrow().profile).ok();
+            let pin = dir.and_then(|d| profile::pinned_version(&d));
+            version_button.set_label(&pin.unwrap_or_else(|| "Latest".to_string()));
+        });
         // **Make room for it first, if this window has not got any.**
         //
         // Raising [`DEFAULT_WIDTH`] fixes the cramped dialog for a profile that
