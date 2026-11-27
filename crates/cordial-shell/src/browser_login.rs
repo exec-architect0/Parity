@@ -93,7 +93,7 @@ mod in_app {
             let captured = captured.clone();
             manager.cookies("https://www.roblox.com/", gtk::gio::Cancellable::NONE, move |result| {
                 let Ok(cookies) = result else { return };
-                let Some(session) = cookies.iter().find_map(|c| {
+                let Some(session) = cookies.iter_mut().find_map(|c| {
                     (c.name().as_deref() == Some(".ROBLOSECURITY"))
                         .then(|| c.value().map(|v| v.to_string()))
                         .flatten()
@@ -108,7 +108,7 @@ mod in_app {
                     return;
                 }
                 let records: Vec<CookieRecord> = cookies
-                    .iter()
+                    .iter_mut()
                     .filter_map(|c| {
                         Some(CookieRecord {
                             domain: c.domain()?.to_string(),
