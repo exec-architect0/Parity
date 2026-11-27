@@ -21,7 +21,6 @@ use libadwaita::gtk;
 #[cfg(feature = "webview")]
 mod in_app {
     use super::*;
-    use gtk::prelude::*;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use webkit6::prelude::*;
@@ -92,7 +91,7 @@ mod in_app {
             let proceed = proceed_for_capture.clone();
             let captured = captured.clone();
             manager.cookies("https://www.roblox.com/", gtk::gio::Cancellable::NONE, move |result| {
-                let Ok(cookies) = result else { return };
+                let Ok(mut cookies) = result else { return };
                 let Some(session) = cookies.iter_mut().find_map(|c| {
                     (c.name().as_deref() == Some(".ROBLOSECURITY"))
                         .then(|| c.value().map(|v| v.to_string()))
