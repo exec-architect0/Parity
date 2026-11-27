@@ -22,7 +22,6 @@ use libadwaita::gtk;
 mod in_app {
     use super::*;
     use gtk::prelude::*;
-    use libadwaita::glib;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use webkit6::prelude::*;
@@ -94,45 +93,43 @@ mod in_app {
             let captured = captured.clone();
             manager.cookies("https://www.roblox.com/", gtk::gio::Cancellable::NONE, move |result| {
                 let Ok(cookies) = result else { return };
-                let Some(session) = cookies
-                    .iter()
-                    .find(|c| c.name() == ".ROBLOSECURITY")
-                    .map(|c| c.value().to_string())
-                else {
+                let Some(session) = cookies.iter().find_map(|c| {
+                    (c.name().as_deref() == Some(".ROBLOSECURITY"))
+                        .then(|| c.value().map(|v| v.to_string()))
+                        .flatten()
+                }) else {
                     return;
                 };
-                if session.is_empty() || !captured.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                if session.is_empty()
+                    || !captured
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok()
+                {
                     return;
                 }
                 let records: Vec<CookieRecord> = cookies
                     .iter()
-                    .filter(|c| c.domain().contains("roblox.com"))
-                    .map(|c| CookieRecord {
-                        domain: c.domain().to_string(),
-                        name: c.name().to_string(),
-                        value: c.value().to_string(),
+                    .filter_map(|c| {
+                        Some(CookieRecord {
+                            domain: c.domain()?.to_string(),
+                            name: c.name()?.to_string(),
+                            value: c.value()?.to_string(),
+                        })
+                        .filter(|record| record.domain.contains("roblox.com"))
                     })
                     .collect();
-                let (sender, receiver) = glib::MainContext::channel(glib::Priority::DEFAULT);
-                std::thread::spawn(move || {
-                    let result = browser_import::save_session(&records, &target);
-                    let _ = sender.send(result);
-                });
-                glib::MainContext::default().attach(Some(&receiver), move |result| {
-                    match result {
-                        Ok(()) => {
-                            dialog.close();
-                            proceed();
-                        }
-                        Err(reason) => {
-                            // A transient failure leaves the window usable:
-                            // the next cookie change tries again.
-                            captured.store(false, Ordering::SeqCst);
-                            show_error(&window, &reason);
-                        }
+                match browser_import::save_session(&records, &target) {
+                    Ok(()) => {
+                        dialog.close();
+                        proceed();
                     }
-                    glib::ControlFlow::Continue
-                });
+                    Err(reason) => {
+                        // A transient failure leaves the window usable: the
+                        // next cookie change tries again.
+                        captured.store(false, Ordering::SeqCst);
+                        show_error(&window, &reason);
+                    }
+                }
                 // `view` is held so the WebKit view outlives the callback that
                 // just read its cookies while the store is written.
                 let _ = &view;
