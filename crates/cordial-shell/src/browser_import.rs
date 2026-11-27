@@ -113,7 +113,7 @@ pub fn save_session(cookies: &[CookieRecord], target: &str) -> Result<(), String
 }
 
 fn authenticated(session: &str) -> Result<AuthenticatedUser, String> {
-    let agent = ureq::Agent::config_builder()
+    let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
         .max_redirects(0)
         .build()

@@ -12,14 +12,15 @@
 //! "use the saved login or enter a new one" choice a real browser has; Cordial
 //! does not keep a second copy of the password.
 
+#[cfg(feature = "webview")]
 use crate::browser_import::{self, CookieRecord};
+use adw::prelude::*;
 use libadwaita as adw;
 use libadwaita::gtk;
 
 #[cfg(feature = "webview")]
 mod in_app {
     use super::*;
-    use adw::prelude::*;
     use gtk::prelude::*;
     use libadwaita::glib;
     use std::sync::atomic::{AtomicBool, Ordering};

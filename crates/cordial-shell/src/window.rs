@@ -1073,7 +1073,7 @@ fn activate_roblox(
         let config = config.clone();
         let join = join.clone();
         let lifecycle = lifecycle.clone();
-        crate::browser_login::prompt(&window, &target_profile, move || {
+        crate::browser_login::prompt(&window.clone(), &target_profile, move || {
             launch_now_tracked(&window, &toasts, &config, &join, &lifecycle, mode);
         });
         return;
