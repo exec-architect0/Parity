@@ -303,6 +303,30 @@ fn populate(view: &Rc<View>) {
     list.add(&follow);
     connect_use(&follow, &play, &profile_dir, None, &status, &weak);
 
+    // A custom pin is a last resort, not a third list: it is the version
+    // somebody got from a mirror or a link that Cordial does not keep a row
+    // for. Prefix and suffix are on one row so it stays findable beside Latest
+    // without another group for one control.
+    let custom = adw::EntryRow::builder()
+        .title("Custom version")
+        .subtitle("Pin a version string Cordial did not list")
+        .build();
+    let pin_custom = gtk::Button::with_label("Pin");
+    pin_custom.set_valign(gtk::Align::Center);
+    custom.add_suffix(&pin_custom);
+    let custom_field = custom.clone();
+    let status_for_custom = status.clone();
+    let dir_for_custom = profile_dir.clone();
+    let view_for_custom = weak.clone();
+    pin_custom.connect_clicked(move |_| {
+        let version = custom_field.text().trim().to_string();
+        match profile::set_pinned_version(&dir_for_custom, Some(&version)) {
+            Ok(()) => repopulate_soon(&view_for_custom),
+            Err(e) => show_status(&status_for_custom, "That version was not accepted", &e),
+        }
+    });
+    list.add(&custom);
+
     if let Some(pin) = pinned.as_deref().filter(|p| !entries.iter().any(|e| e.version == *p)) {
         let row = adw::ActionRow::builder()
             .title(format!("Roblox {pin}"))

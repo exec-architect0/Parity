@@ -139,9 +139,11 @@ impl TitleBar {
 /// since before this row existed. What was missing was a way to raise the
 /// *engine's* own cap and have it stay raised.
 ///
-/// **There is no "Unlimited".** An earlier draft sent 9999, a number nothing
-/// had been measured near. Rows stop at 480 because a number has to be written
-/// down to be offered, not because 480 is where the engine stops.
+/// **"Unlimited" is the explicit 9999 value, not a promise.** Earlier drafts
+/// refused to offer it because nothing had been measured near that number; it
+/// is now a labelled row so somebody with a fast display can find out. Rows
+/// stop at 480 after that because a number has to be written down to be
+/// offered, not because 480 is where the engine stops.
 ///
 /// **The old ceiling of 240 was hearsay, and a user asked for it to go.** A
 /// contributor reported that raising the engine's frame-rate settings to 1000
@@ -164,14 +166,17 @@ pub enum FrameRateLimit {
     /// `unlimited` is what a pre-release build wrote here, when the row had one;
     /// a config that names it still has to load, and 240 is where the engine
     /// stops anyway.
-    #[serde(alias = "unlimited")]
     Cap240,
     Cap360,
     Cap480,
+    /// `DFIntTaskSchedulerTargetFps` set to 9999. The engine's own cap can be
+    /// raised through flags; whether it honours a value this large is a property
+    /// of the experience, not of this setting.
+    Unlimited,
 }
 
 impl FrameRateLimit {
-    pub const ALL: [FrameRateLimit; 8] = [
+    pub const ALL: [FrameRateLimit; 9] = [
         FrameRateLimit::Display,
         FrameRateLimit::Cap90,
         FrameRateLimit::Cap120,
@@ -180,6 +185,7 @@ impl FrameRateLimit {
         FrameRateLimit::Cap240,
         FrameRateLimit::Cap360,
         FrameRateLimit::Cap480,
+        FrameRateLimit::Unlimited,
     ];
 
     /// Order matches the `AdwComboRow` model in `settings.rs`, as
@@ -205,6 +211,7 @@ impl FrameRateLimit {
             FrameRateLimit::Cap240 => "240",
             FrameRateLimit::Cap360 => "360",
             FrameRateLimit::Cap480 => "480",
+            FrameRateLimit::Unlimited => "9999",
         }
     }
 
@@ -222,6 +229,7 @@ impl FrameRateLimit {
             FrameRateLimit::Cap240 => "240 fps",
             FrameRateLimit::Cap360 => "360 fps",
             FrameRateLimit::Cap480 => "480 fps",
+            FrameRateLimit::Unlimited => "Unlimited",
         }
     }
 }

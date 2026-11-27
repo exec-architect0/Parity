@@ -1664,6 +1664,7 @@ mod frame_rate_limit_tests {
             ("144", FrameRateLimit::Cap(144)),
             ("165", FrameRateLimit::Cap(165)),
             ("240", FrameRateLimit::Cap(240)),
+            ("9999", FrameRateLimit::Cap(9999)),
         ];
         for (word, want) in shell {
             assert_eq!(FrameRateLimit::parse(word), Some(want), "{word}");
@@ -1671,7 +1672,7 @@ mod frame_rate_limit_tests {
     }
 
     #[test]
-    fn there_is_no_unlimited_spelling() {
+    fn only_a_number_can_spell_unlimited() {
         for word in ["unlimited", "uncapped", "off", "9999.5", "inf"] {
             assert_eq!(FrameRateLimit::parse(word), None, "{word}");
         }

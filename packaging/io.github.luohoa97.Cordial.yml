@@ -401,7 +401,7 @@ modules:
       #
       # `cordial-runtime/vr` is Play in VR (ADR-053), and what the dynarmic
       # and boost-headers sources above are for.
-      - cargo build --release --offline --features cordial-shell/webview,cordial-runtime/webview,cordial-runtime/vr
+      - cargo build --release --offline --features cordial-shell/webview,cordial-runtime/webview
       # Both binaries, side by side. `launch.rs` looks for the loader as the
       # sibling of `current_exe` and nowhere else — there is no baked-in
       # /app/bin and no configurable path — so shipping the shell without

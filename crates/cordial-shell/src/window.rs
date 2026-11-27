@@ -608,21 +608,6 @@ pub fn build(
         });
     }
 
-    // "Play in VR", as an action: the same call Settings → VR's button makes,
-    // reachable by name, so the page does not hold the window's internals and
-    // there is still one launch path.
-    let launch_vr_action = gtk::gio::SimpleAction::new("launch-vr", None);
-    {
-        let window = window.clone();
-        let toasts = toasts.clone();
-        let config = config_for_launch.clone();
-        let join = join.clone();
-        let lifecycle = lifecycle.clone();
-        launch_vr_action.connect_activate(move |_, _| {
-            activate_roblox(&window.clone().upcast(), &toasts, &config, &join, &lifecycle, Mode::Vr);
-        });
-    }
-
     // **The report screen, and the only place the diagnostics block lives.**
     //
     // The primary menu, the launcher's X11 notice and the About dialog's issue
@@ -694,7 +679,6 @@ pub fn build(
     actions.add_action(&about_action);
     actions.add_action(&report_action);
     actions.add_action(&launch_action);
-    actions.add_action(&launch_vr_action);
     actions.add_action(&settings_action);
     actions.add_action(&profile_action);
     actions.add_action(&fullscreen_action);

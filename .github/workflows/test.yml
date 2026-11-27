@@ -80,7 +80,7 @@ jobs:
         # shape that hid this feature being absent for months.
         run: cargo test --workspace
       - name: cargo test with the web view and VR
-        run: cargo test --workspace --features cordial-shell/webview,cordial-runtime/webview,cordial-runtime/vr
+        run: cargo test --workspace --features cordial-shell/webview,cordial-runtime/webview
 
   # The Discord issue bridge generates its modals from `.github/ISSUE_TEMPLATE/`
   # and fetches them at *runtime*, so an edit to a template needs no redeploy.

@@ -218,7 +218,7 @@ export CORDIAL_GIT_SHA=$(printf %s %{describe} | sed "s/.*-g//")
 # shipped once in the Flatpak and was reported as "webview doesnt work in
 # cordial flatpak". %%check proves it linked rather than trusting this line.
 # cordial-runtime/vr is Play in VR (ADR-053), and why boost-devel is required.
-%cargo_build -f cordial-shell/webview,cordial-runtime/webview,cordial-runtime/vr
+%cargo_build -f cordial-shell/webview,cordial-runtime/webview
 
 %install
 # Not %%cargo_install: this is a virtual workspace with no [package] section,
@@ -350,7 +350,7 @@ appstream-util validate-relax --nonet \
 # binary reported `0 passed; N filtered out`. The build went green having run
 # no tests at all -- the exact shape of failure this project keeps retracting
 # commits for. Do not reflow this line.
-%cargo_test -f cordial-shell/webview,cordial-runtime/webview,cordial-runtime/vr -- -- --skip secrets::tests::a_session_survives_the_round_trip_through_the_service --skip secrets::tests::a_plaintext_store_is_adopted_and_destroyed --skip deep_link::tests::gio_reshapes_a_roblox_link_and_is_therefore_not_where_the_string_comes_from
+%cargo_test -f cordial-shell/webview,cordial-runtime/webview -- -- --skip secrets::tests::a_session_survives_the_round_trip_through_the_service --skip secrets::tests::a_plaintext_store_is_adopted_and_destroyed --skip deep_link::tests::gio_reshapes_a_roblox_link_and_is_therefore_not_where_the_string_comes_from
 
 %files
 %license LICENSE

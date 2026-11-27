@@ -234,7 +234,7 @@
           # first build of this flake (2026-10-01) succeeded and linked no
           # WebKitGTK -- the exact failure described above. The `readelf`
           # tripwire in `postInstall` below now fails the build instead.
-          buildFeatures = [ "cordial-shell/webview" "cordial-runtime/webview" "cordial-runtime/vr" ];
+          buildFeatures = [ "cordial-shell/webview" "cordial-runtime/webview" ];
 
           # `cargo test --workspace` is not run as part of this build.
           # `packaging/rpm/cordial.spec`'s own `%check` already had to skip

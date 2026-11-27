@@ -3515,11 +3515,6 @@ pub fn build_preferences_window(
     // Beside Updates, because the question it answers -- which build, and can I
     // go back -- is the one somebody an update just broke arrives with.
     window.add(&crate::roblox_versions::build_version_page(config.clone()));
-    // Only where the Quest build can run, after the pages about the phone
-    // build: VR is a second way to play, not a setting of the first (ADR-053).
-    if cordial_shell::vr::HOST_SUPPORTED {
-        window.add(&crate::vr_settings::build_vr_page(&window, parent.upcast_ref(), config.clone(), config_path.clone()));
-    }
     // **Five pages where there were seven**, reported as "why are there so many
     // tabs". Appearance held two groups and Get Plugins three; neither was a
     // destination, and a tab per group makes somebody hunt through seven pages
@@ -3684,6 +3679,7 @@ fn build_fastflags_page(
         .build();
 
     let import = gtk::Button::with_label("Import…");
+    let export = gtk::Button::with_label("Export…");
     let clear = gtk::Button::with_label("Clear all");
     let apply = gtk::Button::with_label("Apply");
     apply.add_css_class("suggested-action");
@@ -3748,6 +3744,7 @@ fn build_fastflags_page(
     // suffix made one paragraph up.
     let actions = gtk::Box::builder().spacing(6).valign(gtk::Align::Center).build();
     actions.append(&import);
+    actions.append(&export);
     actions.append(&clear);
     actions.append(&apply);
 
@@ -3851,6 +3848,41 @@ fn build_fastflags_page(
                         return;
                     };
                     import_flags_file(&view, &dialog, &dir, &source);
+                });
+        });
+    }
+    // Export is the other half of Bloxstrap's flag workflow: a list written
+    // here should be movable to another launcher without copying it out of the
+    // editor by hand. It writes the current buffer, not the saved file, so what
+    // leaves this window is what the user can see.
+    {
+        let view = view.clone();
+        let dialog = dialog.clone();
+        export.connect_clicked(move |button| {
+            let buffer = view.buffer();
+            let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false).to_string();
+            if let Err(e) = cordial_plugins::flag_document::parse(&text) {
+                dialog.add_toast(adw::Toast::new(&format!("Not exported — {e}")));
+                return;
+            }
+            let parent = button.root().and_downcast::<gtk::Window>();
+            let json = gtk::FileFilter::new();
+            json.set_name(Some("Flag lists (JSON)"));
+            json.add_suffix("json");
+            let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
+            filters.append(&json);
+            let dialog = dialog.clone();
+            gtk::FileDialog::builder()
+                .title("Export FastFlags")
+                .filters(&filters)
+                .build()
+                .save(parent.as_ref(), gtk::gio::Cancellable::NONE, move |result| {
+                    let Ok(file) = result else { return };
+                    let Some(path) = file.path() else { return };
+                    match std::fs::write(&path, text.as_bytes()) {
+                        Ok(()) => dialog.add_toast(adw::Toast::new("FastFlags exported")),
+                        Err(e) => dialog.add_toast(adw::Toast::new(&format!("Not exported — {e}"))),
+                    }
                 });
         });
     }

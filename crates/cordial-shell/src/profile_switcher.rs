@@ -609,6 +609,7 @@ fn edit_current(parent: &gtk::Window, switcher: &Switcher) {
     dialog.set_default_response(Some("save"));
     dialog.set_close_response("cancel");
     let entry = entry.clone();
+    let parent = parent.clone();
     let switcher_for_save = switcher.clone();
     let name_for_save = name.clone();
     dialog.connect_response(None, move |_, response| {

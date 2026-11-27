@@ -67,7 +67,7 @@ export CORDIAL_GIT_SHA="$CORDIAL_SHORTHASH"
 # below is what catches it here instead. `cordial-runtime/vr` is Play in VR
 # (ADR-053), and why the build needs libboost-dev.
 cargo build --release --locked \
-    --features cordial-shell/webview,cordial-runtime/webview,cordial-runtime/vr
+    --features cordial-shell/webview,cordial-runtime/webview
 
 readelf -d target/release/cordial-run | grep -qi webkit || {
     echo "cordial-run linked no WebKitGTK; the webview features did not take" >&2
