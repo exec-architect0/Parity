@@ -1287,10 +1287,36 @@ bool CallbackStream::open(uint32_t sample_bits, bool is_float, const char* node_
     // AAudioStreamBuilder_setSampleRate to disagree with it.
     uint8_t pod_buffer[1024];
     spa_pod_builder builder = SPA_POD_BUILDER_INIT(pod_buffer, sizeof pod_buffer);
+    // CORDIAL_AUDIO_RATE is a diagnostic control for a suspected rate
+    // mismatch. Left unset, rate and channels stay zero and PipeWire fills
+    // them from the graph, which is the normal "no conversion anywhere" path.
+    // A live capture showed a 2-sample / 2-zero pattern in a stream reporting
+    // 48 kHz, which is what a lower-rate producer stuffed into a 48 kHz
+    // buffer looks like. Naming a rate here forces the engine to mix at that
+    // rate and lets PipeWire's converter do one honest conversion at the sink.
+    uint32_t forced_rate = 0;
+    uint32_t forced_channels = 0;
+    if (const char* value = std::getenv("CORDIAL_AUDIO_RATE")) {
+        const unsigned long parsed = std::strtoul(value, nullptr, 10);
+        if (parsed >= 8000 && parsed <= 192000) {
+            forced_rate = static_cast<uint32_t>(parsed);
+        } else {
+            std::fprintf(stderr,
+                         "E/Cordial-AAudio          CORDIAL_AUDIO_RATE=%s is not 8000..192000; "
+                         "leaving the rate to PipeWire.\n", value);
+        }
+    }
+    if (const char* value = std::getenv("CORDIAL_AUDIO_CHANNELS")) {
+        const unsigned long parsed = std::strtoul(value, nullptr, 10);
+        if (parsed >= 1 && parsed <= 8) {
+            forced_channels = static_cast<uint32_t>(parsed);
+        }
+    }
+
     spa_audio_info_raw info{};
     info.format = wanted;
-    info.rate = 0;
-    info.channels = 0;
+    info.rate = forced_rate;
+    info.channels = forced_channels;
     const spa_pod* params[1];
     params[0] = spa_format_audio_raw_build(&builder, SPA_PARAM_EnumFormat, &info);
 

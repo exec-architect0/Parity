@@ -497,6 +497,33 @@ float buffer_peak(const void* data, uint32_t frames, uint32_t channels, uint32_t
     return peak;
 }
 
+/// Keep the engine's mix inside full scale before it reaches PipeWire.
+///
+/// Measured on a live Cordial stream whose node reported F32LE 2ch 48 kHz:
+/// the right channel peaked at 1.113 of full scale. Nothing in the AAudio
+/// bridge clipped it, so the overshoot reached the sink and whatever converts
+/// the float there made the harsh edge audible. A clamp is the honest answer:
+/// it does not claim to improve the mix, only to stop a value the format
+/// cannot represent from leaving the process. The resampling question is
+/// separate and is handled by CORDIAL_AUDIO_RATE at stream open.
+static void limit_buffer(void* data, uint32_t frames, uint32_t channels, uint32_t bits,
+                         bool is_float) {
+    const size_t samples = static_cast<size_t>(frames) * channels;
+    if (is_float && bits == 32) {
+        auto* p = static_cast<float*>(data);
+        for (size_t i = 0; i < samples; ++i) {
+            if (p[i] > 1.0f) p[i] = 1.0f;
+            else if (p[i] < -1.0f) p[i] = -1.0f;
+        }
+    } else if (!is_float && bits == 16) {
+        auto* p = static_cast<int16_t*>(data);
+        for (size_t i = 0; i < samples; ++i) {
+            if (p[i] > 32767) p[i] = 32767;
+            else if (p[i] < -32768) p[i] = -32768;
+        }
+    }
+}
+
 /// PipeWire's pull, turned into AAudio's push-to-the-app.
 ///
 /// **Realtime.** With the trace off this is two relaxed atomic stores and the
@@ -516,6 +543,10 @@ bool fill_from_engine(void* dst, uint32_t frames, void* user) {
                                : std::chrono::steady_clock::time_point{};
     const bool cont = cb(reinterpret_cast<AAudioStream*>(s), s->data_user, dst,
                           static_cast<int32_t>(frames)) == AAUDIO_CALLBACK_RESULT_CONTINUE;
+    if (cont) {
+        limit_buffer(dst, frames, s->pw->channels(), s->pw->sample_bits(),
+                     s->pw->sample_is_float());
+    }
 
     if (trace) {
         auto now = std::chrono::steady_clock::now();

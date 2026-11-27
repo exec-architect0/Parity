@@ -179,6 +179,24 @@ looks like** — see the correction above. The number that carries weight is the
 `ERR` column, and it is zero on both the Java path and the AAudio path. On this
 machine, at this quantum, neither backend underruns. **AAudio is not measurably
 better here**, and nothing in these four runs argues for making it the default.
+### A live noise report, 2026-11-27
+
+A 10-second `pw-record --target cordial-aaudio-1 --format f32` capture from a
+running game found a repeating pattern of two real samples followed by two
+zeros in both channels, with spectral peaks near 12 kHz and 24 kHz. The right
+channel peaked at 1.113 full scale. `pw-top` showed no xruns (`ERR 0`) and the
+stream was F32LE 2ch 48000, so this is not an underrun or an output-node
+problem. It is the shape of a lower-rate producer stuffed into a 48 kHz buffer,
+plus an overshoot nothing clipped before the sink.
+
+Two controls were added in response. `CORDIAL_AUDIO_RATE=<hz>` names the rate
+in the EnumFormat pod instead of leaving it to PipeWire, so a mismatch can be
+tested without a rebuild; the engine reads the negotiated value back and mixes
+at that rate. `CORDIAL_AUDIO_CHANNELS=<n>` does the same for channel count.
+Normal launches leave both unset. The AAudio fill path now clamps the engine's
+mix to full scale before handing the buffer to PipeWire; this stops overshoot
+reaching the sink but does not attempt to repair a rate mismatch by guessing.
+
 What it is, is structurally different: no `jbyteArray` copy, no `std::deque`,
 no mutex between the engine and PipeWire's callback, and F32 end to end
 instead of S16 through PipeWire's converter.
