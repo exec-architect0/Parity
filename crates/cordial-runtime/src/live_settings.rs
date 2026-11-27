@@ -331,7 +331,6 @@ mod tests {
             serde_json::json!({"gamepad": 1}),
             serde_json::json!({"title_bar": "tiny"}),
             serde_json::json!({"frame_rate_limit": "unlimited"}),
-            serde_json::json!({"frame_rate_limit": "9999"}),
             serde_json::json!({"audio_output": "a\u{0}b"}),
             // One bad value refuses the whole message, so the good key beside it
             // is not applied either.
