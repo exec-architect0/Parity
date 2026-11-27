@@ -610,6 +610,7 @@ fn edit_current(parent: &gtk::Window, switcher: &Switcher) {
     dialog.set_close_response("cancel");
     let entry = entry.clone();
     let parent = parent.clone();
+    let present_parent = parent.clone();
     let switcher_for_save = switcher.clone();
     let name_for_save = name.clone();
     dialog.connect_response(None, move |_, response| {
@@ -618,12 +619,12 @@ fn edit_current(parent: &gtk::Window, switcher: &Switcher) {
         }
         let shown = entry.text().to_string();
         if let Err(e) = profile::set_display_name(&name_for_save, &shown) {
-            crate::window::alert(parent, "Cordial could not rename that profile", &e);
+            crate::window::alert(&parent, "Cordial could not rename that profile", &e);
             return;
         }
         switcher_for_save.refresh();
     });
-    dialog.present(Some(parent));
+    dialog.present(Some(&present_parent));
 }
 
 /// Make a profile, or say why not.

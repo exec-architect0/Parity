@@ -307,10 +307,8 @@ fn populate(view: &Rc<View>) {
     // somebody got from a mirror or a link that Cordial does not keep a row
     // for. Prefix and suffix are on one row so it stays findable beside Latest
     // without another group for one control.
-    let custom = adw::EntryRow::builder()
-        .title("Custom version")
-        .subtitle("Pin a version string Cordial did not list")
-        .build();
+    let custom = adw::EntryRow::builder().title("Custom version").build();
+    custom.set_subtitle("Pin a version string Cordial did not list");
     let pin_custom = gtk::Button::with_label("Pin");
     pin_custom.set_valign(gtk::Align::Center);
     custom.add_suffix(&pin_custom);
