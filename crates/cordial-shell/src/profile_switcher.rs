@@ -217,7 +217,7 @@ fn menu_label(text: &str) -> String {
 /// holding it, which is the only way to clear a stray client from inside
 /// Cordial. An unusable one is not, because nothing can fix it from here.
 fn item_text(name: &str, availability: &Availability) -> (String, bool) {
-    let shown = shorten(name, MENU_TEXT_CHARS);
+    let shown = shorten(&profile::label(name), MENU_TEXT_CHARS);
     match availability {
         Availability::Free => (shown, true),
         Availability::Running => (format!("{shown} (opened in another window)"), true),
@@ -243,6 +243,8 @@ struct Switcher {
     /// Disabled when there is no profile on disk to delete, which is the state
     /// of a fresh install.
     delete: gio::SimpleAction,
+    duplicate: gio::SimpleAction,
+    edit: gio::SimpleAction,
     /// Under the Launch button. Empty, and hidden, in the ordinary case.
     note: gtk::Label,
 }
@@ -297,6 +299,8 @@ impl Switcher {
 
         let actions = gio::Menu::new();
         actions.append(Some("_New Profile…"), Some("profile.new"));
+        actions.append(Some("_Duplicate Profile…"), Some("profile.duplicate"));
+        actions.append(Some("_Edit Profile Name…"), Some("profile.edit"));
         actions.append(Some("_Delete Profile…"), Some("profile.delete"));
         self.menu.append_section(None, &actions);
     }
@@ -311,6 +315,8 @@ impl Switcher {
         // it — a launcher conjuring an account out of drawing its own caption.
         let exists = offered().contains(&name);
         self.delete.set_enabled(exists);
+        self.duplicate.set_enabled(exists);
+        self.edit.set_enabled(exists);
         self.choose.set_state(&name.to_variant());
         let availability = exists.then(|| availability(&name));
         let pin = profile::dir(&name).ok().and_then(|d| profile::pinned_version(&d));
@@ -318,10 +324,9 @@ impl Switcher {
         self.note.set_text(&note);
         self.note.set_visible(!note.is_empty());
 
-        self.label.set_text(&name);
-        // The visible label is the bare name, which says nothing about what it
-        // names to somebody who cannot see where the button sits.
-        self.button.update_property(&[gtk::accessible::Property::Label(&format!("Profile: {name}"))]);
+        let shown = profile::label(&name);
+        self.label.set_text(&shown);
+        self.button.update_property(&[gtk::accessible::Property::Label(&format!("Profile: {shown}"))]);
     }
 }
 
@@ -376,6 +381,8 @@ pub fn build(config: Rc<RefCell<ShellConfig>>, config_path: Rc<PathBuf>) -> Choo
     let choose = gio::SimpleAction::new_stateful("choose", Some(glib::VariantTy::STRING), &current.to_variant());
     let new = gio::SimpleAction::new("new", None);
     let delete = gio::SimpleAction::new("delete", None);
+    let duplicate = gio::SimpleAction::new("duplicate", None);
+    let edit = gio::SimpleAction::new("edit", None);
     // Present so the menu can draw an item for a profile that cannot be chosen,
     // and never enabled, which is what makes GTK grey that item out. An item
     // with no action at all is drawn live and does nothing.
@@ -385,7 +392,7 @@ pub fn build(config: Rc<RefCell<ShellConfig>>, config_path: Rc<PathBuf>) -> Choo
     none.set_enabled(false);
 
     let group = gio::SimpleActionGroup::new();
-    for action in [choose.upcast_ref::<gio::Action>(), new.upcast_ref(), delete.upcast_ref(), unavailable.upcast_ref(), none.upcast_ref()] {
+    for action in [choose.upcast_ref::<gio::Action>(), new.upcast_ref(), delete.upcast_ref(), duplicate.upcast_ref(), edit.upcast_ref(), unavailable.upcast_ref(), none.upcast_ref()] {
         group.add_action(action);
     }
     button.insert_action_group("profile", Some(&group));
@@ -405,6 +412,8 @@ pub fn build(config: Rc<RefCell<ShellConfig>>, config_path: Rc<PathBuf>) -> Choo
         menu,
         choose: choose.clone(),
         delete: delete.clone(),
+        duplicate: duplicate.clone(),
+        edit: edit.clone(),
         note: note.clone(),
     };
 
@@ -435,6 +444,22 @@ pub fn build(config: Rc<RefCell<ShellConfig>>, config_path: Rc<PathBuf>) -> Choo
         delete.connect_activate(move |_, _| {
             if let Some(window) = switcher.button.root().and_downcast::<gtk::Window>() {
                 delete_current(&window, &switcher);
+            }
+        });
+    }
+    {
+        let switcher = switcher.clone();
+        duplicate.connect_activate(move |_, _| {
+            if let Some(window) = switcher.button.root().and_downcast::<gtk::Window>() {
+                duplicate_current(&window, &switcher);
+            }
+        });
+    }
+    {
+        let switcher = switcher.clone();
+        edit.connect_activate(move |_, _| {
+            if let Some(window) = switcher.button.root().and_downcast::<gtk::Window>() {
+                edit_current(&window, &switcher);
             }
         });
     }
@@ -525,6 +550,81 @@ fn delete_current(parent: &gtk::Window, switcher: &Switcher) {
     dialog.present(Some(&present_parent));
 }
 
+/// An internal name derived from the display name, kept valid so a duplicate
+/// can be created without another dialog.
+fn copy_name(shown: &str) -> String {
+    let base: String = shown
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .take(40)
+        .collect();
+    let base = if base.is_empty() { "copy".to_string() } else { base };
+    let mut candidate = format!("{base}-copy");
+    let existing = offered();
+    for n in 2..100 {
+        if !existing.contains(&candidate) {
+            break;
+        }
+        candidate = format!("{base}-copy-{n}");
+    }
+    candidate
+}
+
+/// Copy the shown profile, including its saved sign-in, and select the copy.
+fn duplicate_current(parent: &gtk::Window, switcher: &Switcher) {
+    let source = switcher.current();
+    if !offered().contains(&source) {
+        return;
+    }
+    let target = copy_name(&profile::display_name(&source));
+    match profile::duplicate(&source, &target) {
+        Ok(()) => {
+            switcher.choose(&target);
+            switcher.refresh();
+        }
+        Err(e) => crate::window::alert(parent, "Cordial could not duplicate that profile", &e),
+    }
+}
+
+/// Rename the label only. The directory stays the profile's ID because it is
+/// the lock and the keyring key.
+fn edit_current(parent: &gtk::Window, switcher: &Switcher) {
+    let name = switcher.current();
+    if !offered().contains(&name) {
+        return;
+    }
+    let entry = adw::EntryRow::builder()
+        .title("Profile name")
+        .text(&profile::display_name(&name))
+        .build();
+    let group = adw::PreferencesGroup::new();
+    group.add(&entry);
+    let dialog = adw::AlertDialog::builder()
+        .heading("Edit profile name")
+        .body("This changes the name shown in Cordial. The account and its sign-in are unchanged.")
+        .extra_child(&group)
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("save", "Save");
+    dialog.set_default_response(Some("save"));
+    dialog.set_close_response("cancel");
+    let entry = entry.clone();
+    let switcher_for_save = switcher.clone();
+    let name_for_save = name.clone();
+    dialog.connect_response(None, move |_, response| {
+        if response != "save" {
+            return;
+        }
+        let shown = entry.text().to_string();
+        if let Err(e) = profile::set_display_name(&name_for_save, &shown) {
+            crate::window::alert(parent, "Cordial could not rename that profile", &e);
+            return;
+        }
+        switcher_for_save.refresh();
+    });
+    dialog.present(Some(parent));
+}
+
 /// Make a profile, or say why not.
 ///
 /// Creation goes through [`profile::acquire`] — the same door a launch uses —
@@ -551,8 +651,8 @@ fn create(parent: &gtk::Window, switcher: &Switcher) {
         .heading("New profile")
         .body(
             "A profile is one account's Roblox storage: its own session, settings, flag \
-             overrides and plugin grants. Creating one does not sign you in — Cordial \
-             selects a directory and never sees a password (ADR-012).",
+             overrides and plugin grants. Creating one opens the Roblox sign-in window so \
+             the new profile has a session at once. Cordial never sees your password.",
         )
         .extra_child(&body)
         .build();
@@ -615,11 +715,23 @@ fn create(parent: &gtk::Window, switcher: &Switcher) {
             return;
         }
         let name = typed.text().to_string();
+        let created_new = !offered().contains(&name);
         match profile::acquire(&name) {
             Ok(claim) => {
                 drop(claim);
+                if created_new {
+                    let _ = profile::set_display_name(&name, &name);
+                }
                 switcher.choose(&name);
                 switcher.refresh();
+                // A new profile is useless until it has a session. Ask here,
+                // rather than on the next launch, so creating one goes straight
+                // to the in-app Roblox sign-in.
+                if created_new {
+                    let refresh = switcher.clone();
+                    let sign_in_parent = parent.clone();
+                    crate::browser_login::prompt(&sign_in_parent, &name, move || refresh.refresh());
+                }
             }
             // Both remaining cases already have a sentence written for them on
             // `profile::Error`, and this is not the place to write a second one.

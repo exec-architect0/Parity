@@ -33,6 +33,7 @@
 //! which does the same for the flags path and says why in its own header;
 //! profiles no longer need it in either direction.
 
+use crate::secrets::{self, Kind, SnapshotRequest, Store};
 use std::ffi::c_int;
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
@@ -108,6 +109,144 @@ pub fn dir(name: &str) -> Result<PathBuf, String> {
         return Err(format!("{name:?} is not a usable profile name; use letters, digits, - and _"));
     }
     Ok(root().join(name))
+}
+
+fn metadata_path(name: &str) -> Result<PathBuf, String> {
+    Ok(dir(name)?.join("profile.json"))
+}
+
+/// The name the user gave this profile, as opposed to the directory name it
+/// is keyed by. Missing or damaged metadata falls back to the directory name:
+/// a label the client cannot read is not a reason to refuse to launch.
+pub fn display_name(name: &str) -> String {
+    let Ok(path) = metadata_path(name) else { return name.to_string() };
+    let Ok(text) = std::fs::read_to_string(path) else { return name.to_string() };
+    serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|v| v.get("display_name").and_then(|s| s.as_str()).map(str::to_string))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| name.to_string())
+}
+
+/// Change only the display name. The directory name stays the immutable ID
+/// because it is the lock and the keyring attribute; moving it would mean
+/// re-keying secrets and updating the configured choice in three places.
+pub fn set_display_name(name: &str, shown: &str) -> Result<(), String> {
+    if shown.trim().is_empty() || shown.len() > 64 {
+        return Err("the display name must be 1 to 64 characters".into());
+    }
+    let dir = dir(name)?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let body = serde_json::json!({ "display_name": shown.trim() }).to_string();
+    let path = dir.join("profile.json");
+    let tmp = dir.join("profile.json.new");
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&tmp)
+            .map_err(|e| e.to_string())?;
+        f.set_permissions(std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+        std::io::Write::write_all(&mut f, body.as_bytes()).map_err(|e| e.to_string())?;
+        f.sync_all().map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+/// The signed-in username for this profile, if a saved identity names one.
+/// Neither the value nor its absence is logged; absence just means the switcher
+/// has nothing to put in brackets.
+pub fn username(name: &str) -> Option<String> {
+    let dir = dir(name).ok()?;
+    for store in [Store::File, Store::Keyring] {
+        let bytes = secrets::snapshot(SnapshotRequest {
+            store,
+            profile_dir: &dir,
+            kind: Kind::Identity,
+            max_bytes: 16 * 1024,
+        })?;
+        if let Some(user) = serde_json::from_slice::<serde_json::Value>(&bytes)
+            .ok()
+            .and_then(|v| v.get("username").and_then(|s| s.as_str()).map(str::to_string))
+        {
+            return Some(user);
+        }
+    }
+    None
+}
+
+/// The label shown in the switcher: the chosen name, with the account it is
+/// signed into in brackets once there is one.
+pub fn label(name: &str) -> String {
+    match username(name) {
+        Some(user) if !user.is_empty() => format!("{} [{}]", display_name(name), user),
+        _ => display_name(name),
+    }
+}
+
+fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if matches!(
+            name.as_ref(),
+            ".lock" | "runtime" | "data" | "data.clearing" | "web-login"
+                | "web-login-cache" | "quest" | "cookies" | "identity"
+        ) || name.ends_with(".removing")
+        {
+            continue;
+        }
+        let path = entry.path();
+        let target = to.join(&file_name);
+        if entry.file_type()?.is_dir() {
+            std::fs::create_dir_all(&target)?;
+            copy_tree(&path, &target)?;
+        } else {
+            std::fs::copy(&path, &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Duplicate a profile, including its saved sign-in.
+///
+/// The session is copied through the secret store rather than by copying a
+/// file: keyring items are keyed by the profile's full directory path, so a
+/// raw directory copy would produce a profile that looks configured but is
+/// signed out. Runtime state and caches are deliberately left behind.
+pub fn duplicate(source: &str, target: &str) -> Result<(), String> {
+    if !is_valid_name(target) {
+        return Err(format!("{target:?} is not a usable profile name; use letters, digits, - and _"));
+    }
+    let from = dir(source)?;
+    let to = dir(target)?;
+    if !from.is_dir() {
+        return Err(format!("there is no profile called {source:?}"));
+    }
+    if to.exists() {
+        return Err(format!("a profile called {target:?} already exists"));
+    }
+    let claim = acquire(target)?;
+    drop(claim);
+    copy_tree(&from, &to).map_err(|e| format!("could not copy profile data: {e}"))?;
+    for store in [Store::File, Store::Keyring] {
+        for kind in [Kind::Cookies, Kind::Identity] {
+            if let Some(bytes) = secrets::snapshot(SnapshotRequest {
+                store,
+                profile_dir: &from,
+                kind,
+                max_bytes: 1024 * 1024,
+            }) {
+                let _ = secrets::save(store, &to, kind, &String::from_utf8_lossy(&bytes));
+            }
+        }
+    }
+    set_display_name(target, &format!("Copy of {}", display_name(source)))
 }
 
 /// Profiles that exist, for the settings surface to offer.
