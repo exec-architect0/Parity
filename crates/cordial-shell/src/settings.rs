@@ -1216,7 +1216,6 @@ fn build_audio_group(
     // somebody's choice to a different device.
     {
         let refresh_config = config.clone();
-        let refresh_model = model.clone();
         let refresh_names = live_names.clone();
         let refresh_row = row.clone();
         glib::timeout_add_local(std::time::Duration::from_secs(2), move || {
@@ -1224,10 +1223,8 @@ fn build_audio_group(
             let (labels, current) = output_picker_rows(&audio_devices::sinks(), &chosen);
             if current != *refresh_names.borrow() {
                 *refresh_names.borrow_mut() = current.clone();
-                refresh_model.remove_all();
-                for label in &labels {
-                    refresh_model.append(label);
-                }
+                let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+                refresh_row.set_model(Some(&gtk::StringList::new(&refs)));
                 refresh_row.set_selected(chosen.index_in(&current));
             }
             glib::ControlFlow::Continue
