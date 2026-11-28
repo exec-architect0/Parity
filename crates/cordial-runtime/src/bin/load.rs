@@ -141,10 +141,11 @@ env:
                                      window manager for fullscreen
   CORDIAL_COMPOSITOR_BYPASS=1        X11: set _NET_WM_BYPASS_COMPOSITOR
                                      while fullscreen (off by default)
-  CORDIAL_RESOLUTION=<w>x<h>         render resolution (default 1280x720);
-                                     CORDIAL_FULLSCREEN overrides it
-  CORDIAL_DPI_SCALE=<f>              UI density Roblox lays out against.
-                                     1.0 is a low-density phone; try 1.5-2
+  CORDIAL_RESOLUTION=<w>x<h>         render resolution (default: monitor size,
+                                     capped at 2560x1440; CORDIAL_FULLSCREEN
+                                     overrides it)
+  CORDIAL_DPI_SCALE=<f>              UI density Roblox lays out against
+                                     (default: monitor physical DPI / 96)
   CORDIAL_PLATFORM_NAME=<name>       what Cordial answers when the engine asks
                                      which platform it is on. Defaults to the
                                      device profile's: Windows for pc-windows-11,
@@ -1107,7 +1108,49 @@ extern "C" fn run_bootstrap() {
     }
 }
 
+/// Derive the two display defaults from the monitor GDK reports, not from a
+/// number tuned on one machine. Both are only applied when the caller has not
+/// named a value; an explicit `CORDIAL_RESOLUTION` or `CORDIAL_DPI_SCALE`
+/// always wins.
+fn configure_display_defaults() {
+    let _ = gtk4::init();
+    let Some(display) = gtk4::gdk::Display::default() else { return };
+    let Some(monitor) = display
+        .monitors()
+        .item(0)
+        .and_then(|obj| obj.downcast::<gtk4::gdk::Monitor>().ok())
+    else {
+        return;
+    };
+    let geometry = monitor.geometry();
+
+    if std::env::var_os("CORDIAL_RESOLUTION").is_none()
+        && geometry.width() > 0
+        && geometry.height() > 0
+    {
+        // A 4K panel is a valid answer but a punishing default for a launcher;
+        // the upper cap is a workload ceiling, not a claim about the display.
+        let w = (geometry.width() as u32).clamp(1280, 2560);
+        let h = (geometry.height() as u32).clamp(720, 1440);
+        std::env::set_var("CORDIAL_RESOLUTION", format!("{w}x{h}"));
+    }
+
+    if std::env::var_os("CORDIAL_DPI_SCALE").is_none() {
+        let pixels = geometry.width() as f32 * monitor.scale_factor() as f32;
+        let mm = monitor.width_mm() as f32;
+        if pixels > 0.0 && mm > 0.0 {
+            // 96 dpi is the desktop baseline the viewport millimetres in
+            // init_params.cpp already use. Physical DPI, including the GDK
+            // scale factor, is the only general answer for mixed displays.
+            let dpi = pixels * 25.4 / mm;
+            let scale = (dpi / 96.0).clamp(0.75, 2.5);
+            std::env::set_var("CORDIAL_DPI_SCALE", format!("{scale:.2}"));
+        }
+    }
+}
+
 fn requested_resolution() -> (u32, u32) {
+    configure_display_defaults();
     let Ok(v) = std::env::var("CORDIAL_RESOLUTION") else {
         return (1280, 720);
     };

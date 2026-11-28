@@ -3494,6 +3494,16 @@ pub(crate) const CONTENT_HEIGHT: i32 = 720;
 /// which is what the platform now expects of transient in-app content. It also
 /// takes no `transient_for` and no `modal` -- it is presented *against* a
 /// parent widget instead, so those builder calls go away rather than moving.
+/// Move every group from one page into another. The page builders own their
+/// widgets, and folding them together keeps that ownership rather than
+/// rebuilding the same controls a second time.
+fn absorb_page(target: &adw::PreferencesPage, source: adw::PreferencesPage) {
+    while let Some(group) = source.group(0) {
+        source.remove(&group);
+        target.add(&group);
+    }
+}
+
 pub fn build_preferences_window(
     parent: &impl IsA<gtk::Window>,
     config: Rc<RefCell<ShellConfig>>,
@@ -3506,15 +3516,19 @@ pub fn build_preferences_window(
         .content_height(CONTENT_HEIGHT)
         .build();
 
-    // First, because it is the one that has to be right before anything else
-    // in this window matters: without a build there is nothing to launch, and
-    // a renderer preference for a client that cannot start is decoration.
-    window.add(&build_roblox_page(parent, config.clone()));
-    // Second, next to the page about the build it is about.
-    window.add(&crate::updater::build_update_page(config.clone(), config_path.clone()));
-    // Beside Updates, because the question it answers -- which build, and can I
-    // go back -- is the one somebody an update just broke arrives with.
-    window.add(&crate::roblox_versions::build_version_page(config.clone()));
+    // One Roblox page instead of three. Build, updates and version are the
+    // same question asked three ways: which Roblox am I running, and what can
+    // I do about it. A person who just got an update they hate should not have
+    // to learn which of three tabs owns the answer.
+    let roblox = adw::PreferencesPage::builder()
+        .title("Roblox")
+        .name("roblox")
+        .icon_name("applications-games-symbolic")
+        .build();
+    absorb_page(&roblox, build_roblox_page(parent, config.clone()));
+    absorb_page(&roblox, crate::updater::build_update_page(config.clone(), config_path.clone()));
+    absorb_page(&roblox, crate::roblox_versions::build_version_page(config.clone()));
+    window.add(&roblox);
     // **Five pages where there were seven**, reported as "why are there so many
     // tabs". Appearance held two groups and Get Plugins three; neither was a
     // destination, and a tab per group makes somebody hunt through seven pages

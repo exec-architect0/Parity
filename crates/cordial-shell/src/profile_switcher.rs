@@ -324,9 +324,14 @@ impl Switcher {
         self.note.set_text(&note);
         self.note.set_visible(!note.is_empty());
 
-        let shown = profile::label(&name);
+        // The header is one line in a crowded bar. The chosen name is the
+        // thing it identifies; the account belongs in the tooltip and the
+        // menu, where there is room for a long username without ellipsising
+        // both ends into an unreadable middle.
+        let shown = profile::display_name(&name);
         self.label.set_text(&shown);
-        self.button.update_property(&[gtk::accessible::Property::Label(&format!("Profile: {shown}"))]);
+        self.button.set_tooltip_text(Some(&profile::label(&name)));
+        self.button.update_property(&[gtk::accessible::Property::Label(&format!("Profile: {}", profile::label(&name)))]);
     }
 }
 

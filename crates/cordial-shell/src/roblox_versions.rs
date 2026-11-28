@@ -124,7 +124,8 @@ struct View {
 pub fn build_version_page(config: Rc<RefCell<ShellConfig>>) -> adw::PreferencesPage {
     let page = adw::PreferencesPage::builder()
         .title("Version")
-        // The name `open_on_start` addresses it by: `settings=version`.
+        // Its groups are folded into the Roblox page, which the launcher's
+        // version button opens by name.
         .name("version")
         // Checked on disk: `symbolic/actions/` in Adwaita.
         .icon_name("document-open-recent-symbolic")

@@ -394,7 +394,7 @@ pub fn build(
     }
     let version_window = host.window().clone();
     version_button.connect_clicked(move |_| {
-        let _ = version_window.activate_action("win.settings", Some(&"version".to_variant()));
+        let _ = version_window.activate_action("win.settings", Some(&"roblox".to_variant()));
     });
     host.header().pack_start(&version_button);
 

@@ -2363,11 +2363,21 @@ impl HostWindow {
     /// `looper::pump`'s `CORDIAL_SCRIPT` timeline and from the probes under
     /// `crates/cordial-runtime/examples`.
     pub fn set_fullscreen(&self, on: bool) {
-        if on {
-            self.window.fullscreen();
-        } else {
-            self.window.unfullscreen();
-        }
+        // This is called from `instr_set_fullscreen`, i.e. from the looper
+        // thread when the game asks for fullscreen, not from GTK's main loop.
+        // `gtk_window_fullscreen` is a request to the compositor and must be
+        // made on the thread that owns the main context; doing it in place
+        // leaves the game believing it is fullscreen while the app window is
+        // still windowed. `invoke` runs it directly when we are already on the
+        // right thread and queues it otherwise.
+        let window = self.window.clone();
+        glib::MainContext::default().invoke(move || {
+            if on {
+                window.fullscreen();
+            } else {
+                window.unfullscreen();
+            }
+        });
     }
 
     /// Change the title-bar preference while the window is up (ADR-044).
