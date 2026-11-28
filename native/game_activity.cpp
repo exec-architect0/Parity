@@ -43,6 +43,9 @@ struct CordialTouchContact {
 };
 
 namespace cordial {
+/// Installed by the host; declared here because `GameActivity::setWindowFlags`
+/// below is defined long before the state block at the bottom of this file.
+extern std::atomic<void (*)(int)> g_window_flags_fullscreen_sink;
 std::shared_ptr<jnivm::Object> make_display_metrics(jnivm::ENV* env);
 /// Defined beside `Insets` in init_params.cpp. Declared rather than
 /// duplicated for the same reason make_display_metrics is: one class, one
