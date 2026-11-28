@@ -193,9 +193,12 @@ Two controls were added in response. `CORDIAL_AUDIO_RATE=<hz>` names the rate
 in the EnumFormat pod instead of leaving it to PipeWire, so a mismatch can be
 tested without a rebuild; the engine reads the negotiated value back and mixes
 at that rate. `CORDIAL_AUDIO_CHANNELS=<n>` does the same for channel count.
-Normal launches leave both unset. The AAudio fill path now clamps the engine's
-mix to full scale before handing the buffer to PipeWire; this stops overshoot
-reaching the sink but does not attempt to repair a rate mismatch by guessing.
+`CORDIAL_AUDIO_CHANNELS` now defaults to **8**: the captured buffer's 8-float
+period is the signature of 7.1 PCM written into a stream declared stereo. With
+8 named channels, PipeWire downmixes once at the sink instead of reading
+surround channels as audio samples. Setting `CORDIAL_AUDIO_CHANNELS=2` restores
+the old stereo claim for a control run. The AAudio fill path also clamps the
+engine's mix to full scale before handing the buffer to PipeWire.
 
 What it is, is structurally different: no `jbyteArray` copy, no `std::deque`,
 no mutex between the engine and PipeWire's callback, and F32 end to end

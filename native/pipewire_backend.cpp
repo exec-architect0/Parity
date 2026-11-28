@@ -1295,7 +1295,15 @@ bool CallbackStream::open(uint32_t sample_bits, bool is_float, const char* node_
     // buffer looks like. Naming a rate here forces the engine to mix at that
     // rate and lets PipeWire's converter do one honest conversion at the sink.
     uint32_t forced_rate = 0;
-    uint32_t forced_channels = 0;
+    // Measured on a live 0.34.2 stream: the buffer had an 8-float period,
+    // with front-left/front-right carrying the mix and centre/LFE/surrounds
+    // near zero. That is 7.1 data handed to a stream declared as stereo;
+    // PipeWire then plays the interleaved channels as if they were samples,
+    // which is the harsh noise users heard. Naming 8 channels lets the
+    // engine mix for the layout it is actually writing and lets PipeWire
+    // downmix once at the sink. CORDIAL_AUDIO_CHANNELS restores any other
+    // count for an A/B run.
+    uint32_t forced_channels = 8;
     if (const char* value = std::getenv("CORDIAL_AUDIO_RATE")) {
         const unsigned long parsed = std::strtoul(value, nullptr, 10);
         if (parsed >= 8000 && parsed <= 192000) {
