@@ -274,11 +274,11 @@ fn unmute_waylands_own_errors() {
 /// a wrapper whose own comment names the same rule.
 pub struct HostWindow {
     window: adw::Window,
-    /// Cross-thread request channel for fullscreen. GTK widgets are not
-    /// `Send`, so the engine's looper thread cannot call `fullscreen()` on the
-    /// window itself; it can send a bool to a receiver attached on the GTK
-    /// thread.
-    fullscreen_tx: glib::Sender<bool>,
+    /// Fullscreen request from the engine's looper thread. `1` means ask the
+    /// compositor for fullscreen, `2` means leave it, `0` means nothing
+    /// pending. A GTK-side timer consumes it on the main thread, so no widget
+    /// ever crosses a thread boundary.
+    fullscreen_request: std::sync::Arc<std::sync::atomic::AtomicI32>,
     header: adw::HeaderBar,
     toolbar: adw::ToolbarView,
     /// The widget the content occupies. Its allocation — not the window's — is
@@ -1109,20 +1109,24 @@ impl HostWindow {
         // report. Harmless in `cordial-run`, which never arms it.
         window.connect_map(|_| crate::startup_watch::mapped());
 
-        let (fullscreen_tx, fullscreen_rx) = glib::MainContext::channel(glib::Priority::DEFAULT);
-        let fullscreen_window = window.clone();
-        glib::MainContext::default().attach(Some(&fullscreen_rx), move |on| {
-            if on {
-                fullscreen_window.fullscreen();
-            } else {
-                fullscreen_window.unfullscreen();
-            }
-            glib::ControlFlow::Continue
-        });
+        let fullscreen_request = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
+        {
+            let flag = fullscreen_request.clone();
+            let fs_window = window.clone();
+            glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+                use std::sync::atomic::Ordering;
+                match flag.swap(0, Ordering::SeqCst) {
+                    1 => fs_window.fullscreen(),
+                    2 => fs_window.unfullscreen(),
+                    _ => {}
+                }
+                glib::ControlFlow::Continue
+            });
+        }
 
         HostWindow {
             window,
-            fullscreen_tx,
+            fullscreen_request,
             header,
             toolbar,
             content: content.as_ref().clone(),
@@ -2385,9 +2389,13 @@ impl HostWindow {
         // `gtk_window_fullscreen` is a request to the compositor and must be
         // made on the thread that owns the main context; doing it in place
         // leaves the game believing it is fullscreen while the app window is
-        // still windowed. `invoke` runs it directly when we are already on the
-        // right thread and queues it otherwise.
-        let _ = self.fullscreen_tx.send(on);
+        // still windowed. An atomic flag is posted here and consumed by the
+        // GTK-side timer installed in `with_canvas`; the widget itself never
+        // crosses threads.
+        self.fullscreen_request.store(
+            if on { 1 } else { 2 },
+            std::sync::atomic::Ordering::SeqCst,
+        );
     }
 
     /// Change the title-bar preference while the window is up (ADR-044).
