@@ -3498,7 +3498,13 @@ pub(crate) const CONTENT_HEIGHT: i32 = 720;
 /// widgets, and folding them together keeps that ownership rather than
 /// rebuilding the same controls a second time.
 fn absorb_page(target: &adw::PreferencesPage, source: adw::PreferencesPage) {
-    while let Some(group) = source.group(0) {
+    // `group(index)` needs a newer libadwaita feature than this build enables;
+    // every child of a preferences page is a group, so walking widgets reaches
+    // the same set without depending on that feature.
+    while let Some(child) = source.first_child() {
+        let Ok(group) = child.downcast::<adw::PreferencesGroup>() else {
+            break;
+        };
         source.remove(&group);
         target.add(&group);
     }
