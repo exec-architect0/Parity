@@ -577,6 +577,7 @@ public:
 // answering two different questions (what the field's own editing state is,
 // versus which field has focus) and conflating their storage would make a
 // future bug in one look like a bug in the other.
+std::atomic<void (*)(int)> g_window_flags_fullscreen_sink{nullptr};
 namespace {
 std::mutex g_ime_mutex;
 std::string g_ime_text;
@@ -589,10 +590,6 @@ int g_ime_composing_end = -1;
 /// from "nothing changed" without comparing the state itself.
 std::atomic<unsigned> g_ime_state_generation{0};
 std::atomic<int> g_ime_soft_keyboard_active{0};
-/// Set by the host. `GameActivity.setWindowFlags` is the engine's request to
-/// the platform window; Android would apply FLAG_FULLSCREEN itself, Cordial
-/// forwards the one bit to the GTK surface instead.
-std::atomic<void (*)(int)> g_window_flags_fullscreen_sink{nullptr};
 } // namespace
 
 extern "C" void cordial_window_flags_set_fullscreen_sink(void (*on_change)(int)) {
