@@ -274,6 +274,11 @@ fn unmute_waylands_own_errors() {
 /// a wrapper whose own comment names the same rule.
 pub struct HostWindow {
     window: adw::Window,
+    /// Cross-thread request channel for fullscreen. GTK widgets are not
+    /// `Send`, so the engine's looper thread cannot call `fullscreen()` on the
+    /// window itself; it can send a bool to a receiver attached on the GTK
+    /// thread.
+    fullscreen_tx: glib::Sender<bool>,
     header: adw::HeaderBar,
     toolbar: adw::ToolbarView,
     /// The widget the content occupies. Its allocation — not the window's — is
@@ -1104,8 +1109,20 @@ impl HostWindow {
         // report. Harmless in `cordial-run`, which never arms it.
         window.connect_map(|_| crate::startup_watch::mapped());
 
+        let (fullscreen_tx, fullscreen_rx) = glib::MainContext::channel(glib::Priority::DEFAULT);
+        let fullscreen_window = window.clone();
+        glib::MainContext::default().attach(Some(&fullscreen_rx), move |on| {
+            if on {
+                fullscreen_window.fullscreen();
+            } else {
+                fullscreen_window.unfullscreen();
+            }
+            glib::ControlFlow::Continue
+        });
+
         HostWindow {
             window,
+            fullscreen_tx,
             header,
             toolbar,
             content: content.as_ref().clone(),
@@ -2370,14 +2387,7 @@ impl HostWindow {
         // leaves the game believing it is fullscreen while the app window is
         // still windowed. `invoke` runs it directly when we are already on the
         // right thread and queues it otherwise.
-        let window = self.window.clone();
-        glib::MainContext::default().invoke(move || {
-            if on {
-                window.fullscreen();
-            } else {
-                window.unfullscreen();
-            }
-        });
+        let _ = self.fullscreen_tx.send(on);
     }
 
     /// Change the title-bar preference while the window is up (ADR-044).
