@@ -122,7 +122,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # that these environments differ and a stale build that still runs is this
 # project's most expensive mistake; a floor that only one of them meets is the
 # same mistake at configure time.
-libadwaita = { version = "0.9", features = ["v1_5"] }
+libadwaita = { version = "0.9", features = ["v1_8"] }
 # Optional: see [features] above.
 webkit6 = { version = "0.6", optional = true }
 # `gdk_wayland_surface_get_wl_surface`/`gdk_wayland_display_get_wl_display`,

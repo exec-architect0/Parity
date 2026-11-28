@@ -153,22 +153,19 @@ pub fn installed_version() -> Option<String> {
 
 /// What a profile's choice comes to on this machine, as a build.
 ///
-/// `CORDIAL_APK` first, then the profile's pin, else Latest. Every entry a
-/// launch may run has been checked for who signed it: filed by a route that
-/// verified it, or checked here once, now, for an entry that predates the
-/// records ([`cordial_update::store::ensure_verified`]).
-pub fn resolve(profile_dir: &Path) -> Result<Build, NotFound> {
+/// `CORDIAL_APK` first, then the newest build in the store. Parity updates
+/// Roblox the way an app store does: there is no per-profile version picker
+/// to strand somebody on an old build. Every entry a launch may run has been
+/// checked for who signed it: filed by a route that verified it, or checked
+/// here once, now, for an entry that predates the records
+/// ([`cordial_update::store::ensure_verified`]).
+pub fn resolve(_profile_dir: &Path) -> Result<Build, NotFound> {
     if let Some(apk) = override_apk() {
         return locate_override(&apk);
     }
     verify_store();
     let entries = store::list();
-    let pinned = cordial_shell::profile::pinned_version(profile_dir);
-    let choice = match pinned.as_deref() {
-        Some(v) => Choice::Pinned(v),
-        None => Choice::Latest,
-    };
-    pick(&entries, choice, &cordial_update::apk_signature::pinned())
+    pick(&entries, Choice::Latest, &cordial_update::apk_signature::pinned())
 }
 
 /// [`resolve`]'s decision, over a given store listing and trusted set so it can

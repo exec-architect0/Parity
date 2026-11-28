@@ -58,7 +58,10 @@ use cordial_shell::profile;
 /// `profile::is_valid_name` allows 64, which is far past what fits;
 /// `fdsafdsagfdsgfdgfdgfd` is on this developer's disk right now and without a
 /// cap a `GtkLabel` asks for its whole natural width and stretches the window.
-const NAME_WIDTH: i32 = 24;
+// The header label grows with the account it names; it is capped only to keep
+// a pathological username from pushing the window controls off the bar. The
+// dropdown itself shows the full label without this cap.
+const NAME_WIDTH: i32 = 64;
 
 /// Whether a profile can be handed to a new instance.
 ///
@@ -182,7 +185,7 @@ fn subtitle(name: &str, availability: Option<&Availability>) -> String {
 
 /// Longest a profile name or an operating-system message is drawn in a menu
 /// item before it is shortened in the middle. See [`shorten`].
-const MENU_TEXT_CHARS: usize = 40;
+const MENU_TEXT_CHARS: usize = 80;
 
 /// `text` cut to `max` characters with an ellipsis in the middle, so the end of
 /// a long name -- usually the part that tells two of them apart -- survives.
@@ -319,16 +322,14 @@ impl Switcher {
         self.edit.set_enabled(exists);
         self.choose.set_state(&name.to_variant());
         let availability = exists.then(|| availability(&name));
-        let pin = profile::dir(&name).ok().and_then(|d| profile::pinned_version(&d));
-        let note = with_pin(subtitle(&name, availability.as_ref()), pin.as_deref());
+        let note = subtitle(&name, availability.as_ref());
         self.note.set_text(&note);
         self.note.set_visible(!note.is_empty());
 
-        // The header is one line in a crowded bar. The chosen name is the
-        // thing it identifies; the account belongs in the tooltip and the
-        // menu, where there is room for a long username without ellipsising
-        // both ends into an unreadable middle.
-        let shown = profile::display_name(&name);
+        // Show the account in the header too, but let the label size adapt:
+        // the cap is generous and ellipsis is a last resort, not the default
+        // for every username. The menu and tooltip carry the untruncated form.
+        let shown = profile::label(&name);
         self.label.set_text(&shown);
         self.button.set_tooltip_text(Some(&profile::label(&name)));
         self.button.update_property(&[gtk::accessible::Property::Label(&format!("Profile: {}", profile::label(&name)))]);

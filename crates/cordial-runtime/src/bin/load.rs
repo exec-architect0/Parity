@@ -11,6 +11,7 @@
 #![allow(unsafe_code)]
 
 use std::cell::Cell;
+use std::ffi::CStr;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::Instant;
@@ -145,7 +146,7 @@ env:
                                      capped at 2560x1440; CORDIAL_FULLSCREEN
                                      overrides it)
   CORDIAL_DPI_SCALE=<f>              UI density Roblox lays out against
-                                     (default: monitor physical DPI / 96)
+                                     (default: monitor physical DPI / 160)
   CORDIAL_PLATFORM_NAME=<name>       what Cordial answers when the engine asks
                                      which platform it is on. Defaults to the
                                      device profile's: Windows for pc-windows-11,
@@ -765,6 +766,30 @@ fn call_globals(lib: &linker::Library, when: &str) {
     }
 }
 
+/// The engine's app-bridge notifications are the only place it can announce a
+/// platform action without a JNI export. F11 is handled directly by Cordial,
+/// but the in-game Fullscreen switch has no native hook; if the engine does
+/// announce `FullscreenChanged`, follow it into the GTK window.
+extern "C" fn app_bridge_notification(kind: *const std::os::raw::c_char, payload: *const std::os::raw::c_char) {
+    if kind.is_null() {
+        return;
+    }
+    // SAFETY: the engine passes a NUL-terminated Java string converted by the
+    // native bridge; the pointer is live for the duration of this callback.
+    let kind = unsafe { CStr::from_ptr(kind) }.to_string_lossy();
+    if kind != "FullscreenChanged" && kind != "ToggleFullscreen" {
+        return;
+    }
+    let on = if payload.is_null() {
+        true
+    } else {
+        // SAFETY: same contract as `kind` above.
+        let value = unsafe { CStr::from_ptr(payload) }.to_string_lossy();
+        matches!(value.as_ref(), "true" | "True" | "On" | "on" | "1")
+    };
+    crate::android::backend_set_fullscreen(on);
+}
+
 extern "C" fn run_bootstrap() {
     let Some(plan) = BOOTSTRAP.get() else {
         eprintln!("  bootstrapTheApp: nothing planned");
@@ -1139,11 +1164,11 @@ fn configure_display_defaults() {
         let pixels = geometry.width() as f32 * monitor.scale_factor() as f32;
         let mm = monitor.width_mm() as f32;
         if pixels > 0.0 && mm > 0.0 {
-            // 96 dpi is the desktop baseline the viewport millimetres in
-            // init_params.cpp already use. Physical DPI, including the GDK
-            // scale factor, is the only general answer for mixed displays.
+            // Android's density baseline is 160 dpi. DisplayMetrics and
+            // PlatformParams both consume this one value, so the client is
+            // no longer told "160 dpi" in one field and "96 dpi" in another.
             let dpi = pixels * 25.4 / mm;
-            let scale = (dpi / 96.0).clamp(0.75, 2.5);
+            let scale = (dpi / 160.0).clamp(0.75, 3.0);
             std::env::set_var("CORDIAL_DPI_SCALE", format!("{scale:.2}"));
         }
     }
@@ -1873,6 +1898,11 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+
+    // Density and resolution must be settled before the engine's first
+    // DisplayMetrics construction inside initializeNativeCode; reading them
+    // only when the window opens leaves that object at 1280x720/1.0 for ever.
+    configure_display_defaults();
 
     // Before anything reads or writes the profile at all, and before the
     // network gate below, which reads a setting out of it.
@@ -4450,6 +4480,7 @@ fn main() -> ExitCode {
                                         // MainGameActivity, and this is the chain
                                         // that actually brings the client up.
                                         let apk_path = asset_folder(&opt.apk);
+                                        linker::game_activity::app_bridge_set_sink(Some(app_bridge_notification));
                                         if let Some(f) = lib.symbol(
                                             "Java_com_roblox_engine_jni_NativeGLInterface_nativeAppBridgeV2InitWithParams",
                                         ) {

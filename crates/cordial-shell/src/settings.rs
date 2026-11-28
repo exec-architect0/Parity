@@ -1173,6 +1173,7 @@ fn build_audio_group(
 
     let label_refs: Vec<&str> = labels.iter().map(String::as_str).collect();
     let model = gtk::StringList::new(&label_refs);
+    let live_names = std::rc::Rc::new(std::cell::RefCell::new(names.clone()));
     let row = adw::ComboRow::builder()
         .title("Output device")
         // The half that is misleading if omitted, twice over. First: this is
@@ -1201,10 +1202,35 @@ fn build_audio_group(
         // is indexed against exactly the list it was built from, including the
         // "not connected" entry. Re-reading the live sinks on selection would
         // reindex against a different list.
-        let names = names.clone();
+        let names = live_names.clone();
         row.connect_selected_notify(move |row| {
+            let names = names.borrow().clone();
             config.borrow_mut().audio_output = AudioOutput::from_index(row.selected(), &names);
             persist(&config, &config_path);
+        });
+    }
+
+    // A device picker that is a snapshot becomes a lie the moment a headset is
+    // plugged in or the desktop default changes. Refresh the row on the GTK
+    // thread; the selection is stored by node name, so a reindex cannot move
+    // somebody's choice to a different device.
+    {
+        let refresh_config = config.clone();
+        let refresh_model = model.clone();
+        let refresh_names = live_names.clone();
+        let refresh_row = row.clone();
+        glib::timeout_add_local(std::time::Duration::from_secs(2), move || {
+            let chosen = refresh_config.borrow().audio_output.clone();
+            let (labels, current) = output_picker_rows(&audio_devices::sinks(), &chosen);
+            if current != *refresh_names.borrow() {
+                *refresh_names.borrow_mut() = current.clone();
+                refresh_model.remove_all();
+                for label in &labels {
+                    refresh_model.append(label);
+                }
+                refresh_row.set_selected(chosen.index_in(&current));
+            }
+            glib::ControlFlow::Continue
         });
     }
     group.add(&row);
@@ -1572,48 +1598,6 @@ fn build_general_page(
         });
     }
     group.add(&gamepad);
-
-    // Two switches, because the sound is a separate decision. The first records
-    // every session from its first frame; F9 in the game window starts and stops
-    // a recording whether or not it is on. Both are read at launch.
-    let record = adw::SwitchRow::builder()
-        .title("Record gameplay")
-        .subtitle("Saves each session as a video. F9 in the game starts and stops one at any time.")
-        .active(config.borrow().record_session)
-        .build();
-    record.set_subtitle_lines(2);
-    record.add_suffix(&detail(
-        "Needs ffmpeg. Files go to Videos/Cordial, or to the profile's recordings \
-         folder inside the Flatpak, which cannot see Videos.\n\nThe engine's own \
-         Record Video button does nothing on Android, so this reads the frames \
-         Cordial presents. It costs a few milliseconds per captured frame.\n\n\
-         F9 in the game window starts and stops a recording, and the window \
-         title shows REC while one runs. CORDIAL_RECORD_KEY changes the key, or \
-         turns it off with the value off.",
-    ));
-    {
-        let config = config.clone();
-        let config_path = config_path.clone();
-        record.connect_active_notify(move |row| {
-            config.borrow_mut().record_session = row.is_active();
-            persist(&config, &config_path);
-        });
-    }
-    group.add(&record);
-    let record_audio = adw::SwitchRow::builder()
-        .title("Record sound too")
-        .subtitle("The game's own sound. Other programs are not recorded.")
-        .active(config.borrow().record_audio)
-        .build();
-    {
-        let config = config.clone();
-        let config_path = config_path.clone();
-        record_audio.connect_active_notify(move |row| {
-            config.borrow_mut().record_audio = row.is_active();
-            persist(&config, &config_path);
-        });
-    }
-    group.add(&record_audio);
 
     page.add(&group);
     page.add(&build_audio_group(config.clone(), config_path.clone()));
@@ -3498,13 +3482,7 @@ pub(crate) const CONTENT_HEIGHT: i32 = 720;
 /// widgets, and folding them together keeps that ownership rather than
 /// rebuilding the same controls a second time.
 fn absorb_page(target: &adw::PreferencesPage, source: adw::PreferencesPage) {
-    // `group(index)` needs a newer libadwaita feature than this build enables;
-    // every child of a preferences page is a group, so walking widgets reaches
-    // the same set without depending on that feature.
-    while let Some(child) = source.first_child() {
-        let Ok(group) = child.downcast::<adw::PreferencesGroup>() else {
-            break;
-        };
+    while let Some(group) = source.group(0) {
         source.remove(&group);
         target.add(&group);
     }
@@ -3533,7 +3511,6 @@ pub fn build_preferences_window(
         .build();
     absorb_page(&roblox, build_roblox_page(parent, config.clone()));
     absorb_page(&roblox, crate::updater::build_update_page(config.clone(), config_path.clone()));
-    absorb_page(&roblox, crate::roblox_versions::build_version_page(config.clone()));
     window.add(&roblox);
     // **Five pages where there were seven**, reported as "why are there so many
     // tabs". Appearance held two groups and Get Plugins three; neither was a

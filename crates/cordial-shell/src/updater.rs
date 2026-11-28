@@ -897,7 +897,7 @@ pub fn present(
     {
         let banner_for_click = banner.clone();
         banner.connect_button_clicked(move |_| {
-            let _ = banner_for_click.activate_action("win.settings", Some(&"updates".to_variant()));
+            let _ = banner_for_click.activate_action("win.settings", Some(&"roblox".to_variant()));
         });
     }
     // Everything the answer touches, in one closure, so a check started from
