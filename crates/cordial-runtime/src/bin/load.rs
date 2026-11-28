@@ -787,7 +787,7 @@ extern "C" fn app_bridge_notification(kind: *const std::os::raw::c_char, payload
         let value = unsafe { CStr::from_ptr(payload) }.to_string_lossy();
         matches!(value.as_ref(), "true" | "True" | "On" | "on" | "1")
     };
-    crate::android::backend_set_fullscreen(on);
+    cordial_runtime::android::backend_set_fullscreen(on);
 }
 
 extern "C" fn run_bootstrap() {
