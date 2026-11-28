@@ -865,10 +865,15 @@ pub fn physical_cores() -> usize {
 }
 
 fn builtin_layer() -> Layer {
-    Layer {
-        source: Source::Builtin,
-        values: BUILTIN.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+    let mut values: std::collections::BTreeMap<String, String> =
+        BUILTIN.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    // Diagnostic only. Roblox's own ping trace has no native sink; this asks
+    // the engine to print its RakNet/RbxTransport breakdown so a displayed
+    // ping can be compared with the path to the assigned relay.
+    if std::env::var_os("CORDIAL_TRACE_PING").is_some() {
+        values.insert("DFFlagDataPingTrace".to_string(), "True".to_string());
     }
+    Layer { source: Source::Builtin, values }
 }
 
 /// Every layer, in precedence order: Cordial's own defaults first so anything
