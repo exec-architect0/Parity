@@ -1149,8 +1149,7 @@ fn build_audio_group(
     let group = adw::PreferencesGroup::builder().title("Audio").build();
 
     let sinks = audio_devices::sinks();
-    let chosen = config.borrow().audio_output.clone();
-    let (labels, names) = output_picker_rows(&sinks, &chosen);
+    let (labels, _names) = output_picker_rows(&sinks, &AudioOutput::default());
 
     // Nothing to choose between, and the reason is not the user's fault. An
     // empty list means no PipeWire session was reachable, which is the same
@@ -1171,65 +1170,18 @@ fn build_audio_group(
         return group;
     }
 
-    let label_refs: Vec<&str> = labels.iter().map(String::as_str).collect();
-    let model = gtk::StringList::new(&label_refs);
-    let live_names = std::rc::Rc::new(std::cell::RefCell::new(names.clone()));
-    let row = adw::ComboRow::builder()
+    // No output picker here. Cordial's job is to hand Roblox the system's
+    // default sink and keep following it when the desktop default changes; a
+    // second selection in Preferences would let the two disagree. The in-game
+    // list is FMOD's and cannot be filled from this side without patching the
+    // engine (ADR-001/003).
+    config.borrow_mut().audio_output = AudioOutput::default();
+    let _ = persist(&config, &config_path);
+    let row = adw::ActionRow::builder()
         .title("Output device")
-        // The half that is misleading if omitted, twice over. First: this is
-        // Cordial's routing, not Roblox's own device list -- the in-game
-        // picker is FMOD's and cannot be filled from here (see `AudioOutput`).
-        // Second: "System default" is a standing instruction rather than a
-        // snapshot, so somebody who switches their desktop's default while
-        // playing will find the game follows, which is what they want and not
-        // what a picker usually implies.
-        .subtitle("Where Roblox's sound goes. Nothing else on the desktop moves with it.")
-        .model(&model)
-        .selected(chosen.index_in(&names))
+        .subtitle(format!("System default — {}", labels.get(1).cloned().unwrap_or_else(|| "the session default".into())))
         .build();
     row.set_subtitle_lines(2);
-    row.add_suffix(&detail(
-        "System default is a standing instruction rather than a snapshot: change your \
-         desktop's default while playing and the game follows.\n\nThis is Cordial's \
-         routing, not Roblox's own device list. The in-game picker belongs to the \
-         engine's audio library and cannot be filled from here.",
-    ));
-
-    {
-        let config = config.clone();
-        let config_path = config_path.clone();
-        // Moved into the closure: the model outlives this function and the row
-        // is indexed against exactly the list it was built from, including the
-        // "not connected" entry. Re-reading the live sinks on selection would
-        // reindex against a different list.
-        let names = live_names.clone();
-        row.connect_selected_notify(move |row| {
-            let names = names.borrow().clone();
-            config.borrow_mut().audio_output = AudioOutput::from_index(row.selected(), &names);
-            persist(&config, &config_path);
-        });
-    }
-
-    // A device picker that is a snapshot becomes a lie the moment a headset is
-    // plugged in or the desktop default changes. Refresh the row on the GTK
-    // thread; the selection is stored by node name, so a reindex cannot move
-    // somebody's choice to a different device.
-    {
-        let refresh_config = config.clone();
-        let refresh_names = live_names.clone();
-        let refresh_row = row.clone();
-        glib::timeout_add_local(std::time::Duration::from_secs(2), move || {
-            let chosen = refresh_config.borrow().audio_output.clone();
-            let (labels, current) = output_picker_rows(&audio_devices::sinks(), &chosen);
-            if current != *refresh_names.borrow() {
-                *refresh_names.borrow_mut() = current.clone();
-                let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
-                refresh_row.set_model(Some(&gtk::StringList::new(&refs)));
-                refresh_row.set_selected(chosen.index_in(&current));
-            }
-            glib::ControlFlow::Continue
-        });
-    }
     group.add(&row);
     group.add(&build_microphone_row(config, config_path));
     group

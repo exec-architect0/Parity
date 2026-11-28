@@ -485,7 +485,15 @@ fn data_dir() -> PathBuf {
 /// instrument; until somebody stands in it and reads YES, this entry is a
 /// reasoned guess and the paragraph above about measured-not-inferred applies
 /// to it as much as to anything else.
-const BUILTIN: &[(&str, &str)] = &[("FFlagUserLaunchedWithBloxstrap", "True")];
+// Texture quality is a separate axis from UI density. Density 1.0 keeps the
+// desktop-sized layout; these two flags ask Roblox's texture manager for the
+// higher asset tier that a large window otherwise only gets on a hi-DPI
+// phone. CORDIAL_TEXTURE_QUALITY=0 disables the override for a control run.
+const BUILTIN: &[(&str, &str)] = &[
+    ("FFlagUserLaunchedWithBloxstrap", "True"),
+    ("DFFlagTextureQualityOverrideEnabled", "True"),
+    ("DFIntTextureQualityOverride", "3"),
+];
 
 /// How hard to push the engine's own worker pools, as a choice rather than a
 /// default.
@@ -867,6 +875,10 @@ pub fn physical_cores() -> usize {
 fn builtin_layer() -> Layer {
     let mut values: std::collections::BTreeMap<String, String> =
         BUILTIN.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    if std::env::var("CORDIAL_TEXTURE_QUALITY").as_deref() == Ok("0") {
+        values.remove("DFFlagTextureQualityOverrideEnabled");
+        values.remove("DFIntTextureQualityOverride");
+    }
     // Diagnostic only. Roblox's own ping trace has no native sink; this asks
     // the engine to print its RakNet/RbxTransport breakdown so a displayed
     // ping can be compared with the path to the assigned relay.
