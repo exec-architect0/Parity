@@ -846,6 +846,12 @@ extern "C" fn on_app_bridge(kind: *const c_char, data: *const c_char) {
         println!("[webview] an app-bridge notification was not valid UTF-8");
         return;
     };
+    if kind == "FullscreenChanged" || kind == "ToggleFullscreen" {
+        let on = matches!(data, "true" | "True" | "On" | "on" | "1");
+        println!("[webview] app bridge {kind}={data}: following engine fullscreen");
+        crate::android::backend_set_fullscreen(on);
+        return;
+    }
     let outcome = dispatch_app_bridge(kind, data, |request| match PRESENTER.get() {
         Some(present) => {
             CAPTCHA_OPEN.store(true, Ordering::Release);

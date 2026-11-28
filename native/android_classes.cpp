@@ -1124,7 +1124,7 @@ public:
             fprintf(stderr, "[roblox] app bridge: OPEN_CAPTCHA_VIEW <payload elided, %zu bytes>\n",
                     payload.size());
             if (auto* sink = g_app_bridge_sink.load(std::memory_order_acquire)) {
-                sink(kind.c_str(), payload.c_str());
+                sink(kind.c_str(), "");
             } else {
                 fprintf(stderr,
                         "[roblox] app bridge: nothing is listening for OPEN_CAPTCHA_VIEW, so the "
@@ -1133,6 +1133,12 @@ public:
             return;
         }
         fprintf(stderr, "[roblox] app bridge: %s %s\n", kind.c_str(), payload.c_str());
+        // Every kind is forwarded, not only the security check. A single
+        // platform sink is cheaper than a second sink per feature and lets the
+        // Rust side decide which notifications it acts on.
+        if (auto* sink = g_app_bridge_sink.load(std::memory_order_acquire)) {
+            sink(kind.c_str(), payload.c_str());
+        }
     }
 
     /// The one notification Cordial acts on rather than only prints.

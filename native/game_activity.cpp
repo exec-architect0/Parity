@@ -161,7 +161,20 @@ public:
     // not what either does with its arguments, which Cordial has no window
     // manager flags or `EditorInfo` layout to apply.
     void setImeEditorInfoFields(ENV*, jint, jint, jint) {}
-    void setWindowFlags(ENV*, jint, jint) {}
+    void setWindowFlags(ENV*, jint add, jint mask) {
+        constexpr jint FLAG_FULLSCREEN = 0x00040000;
+        static std::atomic<bool> reported{false};
+        if (!reported.exchange(true)) {
+            fprintf(stderr, "[game_activity] setWindowFlags add=0x%x mask=0x%x\n", add, mask);
+        }
+        const bool added = (add & FLAG_FULLSCREEN) != 0;
+        const bool removed = (mask & FLAG_FULLSCREEN) != 0;
+        if ((added || removed)) {
+            if (auto* sink = g_window_flags_fullscreen_sink.load(std::memory_order_acquire)) {
+                sink(added && !removed ? 1 : 0);
+            }
+        }
+    }
 
     /// `getWindowInsets(int)` and `getWaterfallInsets()`.
     ///
@@ -573,7 +586,15 @@ int g_ime_composing_end = -1;
 /// from "nothing changed" without comparing the state itself.
 std::atomic<unsigned> g_ime_state_generation{0};
 std::atomic<int> g_ime_soft_keyboard_active{0};
+/// Set by the host. `GameActivity.setWindowFlags` is the engine's request to
+/// the platform window; Android would apply FLAG_FULLSCREEN itself, Cordial
+/// forwards the one bit to the GTK surface instead.
+std::atomic<void (*)(int)> g_window_flags_fullscreen_sink{nullptr};
 } // namespace
+
+extern "C" void cordial_window_flags_set_fullscreen_sink(void (*on_change)(int)) {
+    cordial::g_window_flags_fullscreen_sink.store(on_change, std::memory_order_release);
+}
 
 extern "C" void cordial_ime_set_state(const char* text, int sel_start, int sel_end,
                                       int comp_start, int comp_end) {

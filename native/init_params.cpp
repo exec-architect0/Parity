@@ -559,21 +559,16 @@ public:
         auto p = std::make_shared<DisplayMetrics>();
         p->widthPixels = width;
         p->heightPixels = height;
-        // One density everywhere. CORDIAL_DPI_SCALE is the monitor's physical
-        // DPI divided by Android's 160 dpi baseline, so density, densityDpi
-        // and the xdpi/ydpi pair now describe the same display. Previously
-        // densityDpi said 160 while xdpi said 96, which asked Roblox to lay
-        // out a 96 dpi desktop as a low-density phone.
-        float scale = 1.0f;
-        if (const char* value = std::getenv("CORDIAL_DPI_SCALE")) {
-            float parsed = std::strtof(value, nullptr);
-            if (parsed >= 0.75f && parsed <= 3.0f) scale = parsed;
-        }
-        p->density = scale;
-        p->scaledDensity = scale;
-        p->densityDpi = static_cast<jint>(160.0f * scale);
-        p->xdpi = 160.0f * scale;
-        p->ydpi = 160.0f * scale;
+        // Desktop scaling, not phone scaling. Roblox lays out in dp against a
+        // 160 dpi baseline; a desktop window wants one dp to be one pixel,
+        // which is the 1.0 density it has always used. Render resolution is a
+        // separate setting and now follows the monitor, so the UI is sharp
+        // without pretending the machine is a handheld device.
+        p->density = 1.0f;
+        p->scaledDensity = 1.0f;
+        p->densityDpi = 160;
+        p->xdpi = 96.0f;
+        p->ydpi = 96.0f;
         to_jni(env, p);
         return p;
     }

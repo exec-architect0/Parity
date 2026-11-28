@@ -11,7 +11,6 @@
 #![allow(unsafe_code)]
 
 use std::cell::Cell;
-use std::ffi::CStr;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::Instant;
@@ -146,7 +145,7 @@ env:
                                      capped at 2560x1440; CORDIAL_FULLSCREEN
                                      overrides it)
   CORDIAL_DPI_SCALE=<f>              UI density Roblox lays out against
-                                     (default: monitor physical DPI / 160)
+                                     (default: 1.0, desktop scaling)
   CORDIAL_PLATFORM_NAME=<name>       what Cordial answers when the engine asks
                                      which platform it is on. Defaults to the
                                      device profile's: Windows for pc-windows-11,
@@ -766,28 +765,9 @@ fn call_globals(lib: &linker::Library, when: &str) {
     }
 }
 
-/// The engine's app-bridge notifications are the only place it can announce a
-/// platform action without a JNI export. F11 is handled directly by Cordial,
-/// but the in-game Fullscreen switch has no native hook; if the engine does
-/// announce `FullscreenChanged`, follow it into the GTK window.
-extern "C" fn app_bridge_notification(kind: *const std::os::raw::c_char, payload: *const std::os::raw::c_char) {
-    if kind.is_null() {
-        return;
-    }
-    // SAFETY: the engine passes a NUL-terminated Java string converted by the
-    // native bridge; the pointer is live for the duration of this callback.
-    let kind = unsafe { CStr::from_ptr(kind) }.to_string_lossy();
-    if kind != "FullscreenChanged" && kind != "ToggleFullscreen" {
-        return;
-    }
-    let on = if payload.is_null() {
-        true
-    } else {
-        // SAFETY: same contract as `kind` above.
-        let value = unsafe { CStr::from_ptr(payload) }.to_string_lossy();
-        matches!(value.as_ref(), "true" | "True" | "On" | "on" | "1")
-    };
-    cordial_runtime::android::backend_set_fullscreen(on);
+extern "C" fn window_flags_fullscreen(on: std::os::raw::c_int) {
+    println!("[fullscreen] engine setWindowFlags: {}", on != 0);
+    cordial_runtime::android::backend_set_fullscreen(on != 0);
 }
 
 extern "C" fn run_bootstrap() {
@@ -1160,18 +1140,9 @@ fn configure_display_defaults() {
         std::env::set_var("CORDIAL_RESOLUTION", format!("{w}x{h}"));
     }
 
-    if std::env::var_os("CORDIAL_DPI_SCALE").is_none() {
-        let pixels = geometry.width() as f32 * monitor.scale_factor() as f32;
-        let mm = monitor.width_mm() as f32;
-        if pixels > 0.0 && mm > 0.0 {
-            // Android's density baseline is 160 dpi. DisplayMetrics and
-            // PlatformParams both consume this one value, so the client is
-            // no longer told "160 dpi" in one field and "96 dpi" in another.
-            let dpi = pixels * 25.4 / mm;
-            let scale = (dpi / 160.0).clamp(0.75, 3.0);
-            std::env::set_var("CORDIAL_DPI_SCALE", format!("{scale:.2}"));
-        }
-    }
+    // UI density stays at 1.0: desktop scaling with one dp per pixel. Only
+    // render resolution follows the monitor. An explicit CORDIAL_DPI_SCALE is
+    // still honoured by init_params.cpp for a control run.
 }
 
 fn requested_resolution() -> (u32, u32) {
@@ -4480,7 +4451,7 @@ fn main() -> ExitCode {
                                         // MainGameActivity, and this is the chain
                                         // that actually brings the client up.
                                         let apk_path = asset_folder(&opt.apk);
-                                        linker::game_activity::app_bridge_set_sink(Some(app_bridge_notification));
+                                        linker::game_activity::window_flags_set_fullscreen_sink(Some(window_flags_fullscreen));
                                         if let Some(f) = lib.symbol(
                                             "Java_com_roblox_engine_jni_NativeGLInterface_nativeAppBridgeV2InitWithParams",
                                         ) {

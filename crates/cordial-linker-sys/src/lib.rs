@@ -805,6 +805,7 @@ pub mod game_activity {
         fn cordial_app_bridge_set_sink(
             on_notification: Option<extern "C" fn(*const c_char, *const c_char)>,
         );
+        fn cordial_window_flags_set_fullscreen_sink(on_change: Option<extern "C" fn(c_int)>);
         fn cordial_app_bridge_test_fire(kind: *const c_char, payload: *const c_char);
         fn cordial_report_battery_state_changed(
             f: *mut c_void,
@@ -1444,6 +1445,15 @@ pub mod game_activity {
         // SAFETY: the far side stores the pointer in an atomic and calls it
         // from the engine's thread; a null clears it.
         unsafe { cordial_app_bridge_set_sink(on_notification) }
+    }
+
+    /// Install the sink for Android window flags. `GameActivity.setWindowFlags`
+    /// is how the engine asks the platform for fullscreen; Cordial's own
+    /// implementation of that Java method forwards the fullscreen bit here.
+    pub fn window_flags_set_fullscreen_sink(on_change: Option<extern "C" fn(c_int)>) {
+        // SAFETY: the far side stores the pointer in an atomic and calls it
+        // from the engine's thread; a null clears it.
+        unsafe { cordial_window_flags_set_fullscreen_sink(on_change) }
     }
 
     /// Deliver an app-bridge notification the way the engine's own call would,
